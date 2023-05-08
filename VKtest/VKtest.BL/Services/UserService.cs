@@ -25,17 +25,17 @@ namespace VKtest.BL.Services {
 
 		public async Task<Response> AddUser(UserRegisterModelDto model) {
 			var state = await _context.UserStates.FirstOrDefaultAsync(s => s.Code == State.Active);
-			if (state == null) throw new NotFoundException("Status does not found");
+			if (state == null) throw new NotFoundException("status does not found");
 			var group = await _context.UserGroups.FirstOrDefaultAsync(s => s.Code == model.userGroup);
 			if (group == null) throw new NotFoundException("group does not found");
 			var admin = await _userManager.Users.FirstOrDefaultAsync(u => u.userGroup.Code == Group.Admin);
-			if (admin != null & group.Code == Group.Admin) throw new ConflictException("user with gorup Admin already exists");
+			if (admin != null & group.Code == Group.Admin) throw new ConflictException("user with group Admin already exists");
 			var user = new User { 
 				UserName = model.Login,
 				Email = model.Email,
 				userState = state,
 				userGroup = group
-		};
+			};
 			var result = await _userManager.CreateAsync(user, model.Password);
 			if (result.Succeeded) {
 				return new Response {
@@ -48,13 +48,18 @@ namespace VKtest.BL.Services {
 				throw new BadRequestException(errors);
 
 			}
+			
+			// Thread.Sleep(5000);
 		}
 
 		public async Task<Response> DeleteUser(Guid Id) {
-			var user = await _userManager.Users.FirstOrDefaultAsync(x => x.Id == Id);
-			if (user == null) throw new KeyNotFoundException("User with this Id does not found");
+			var user = await _userManager.Users
+				.Include(u => u.userState)
+				.FirstOrDefaultAsync(x => x.Id == Id);
+			if (user == null) throw new KeyNotFoundException("user with this Id does not found");
 			var state = await _context.UserStates.FirstOrDefaultAsync(s => s.Code == State.Blocked);
-			if (state == null) throw new NotFoundException("Status does not found");
+			if (state == null) throw new NotFoundException("status does not found");
+			if (user.userState.Code == State.Blocked) throw new ConflictException("user already blocked");
 			user.userState = state;
 			await _userManager.UpdateAsync(user);
 			return new Response {
@@ -68,7 +73,7 @@ namespace VKtest.BL.Services {
 				.Include(u=>u.userGroup)
 				.Include(u=>u.userState)
 				.FirstOrDefaultAsync(x => x.Id == Id);
-			if (user == null) throw new KeyNotFoundException("User with this Id does not found");
+			if (user == null) throw new KeyNotFoundException("user with this Id does not found");
 			return new UserModelDto {
 				Login = user.UserName,
 				Email = user.Email,
@@ -88,17 +93,17 @@ namespace VKtest.BL.Services {
 		}
 
 		public async Task<UserPagedListDto> GetUsers(int Page = 1) {
-			if (Page <= 0) throw new BadRequestException("Wrong page");
+			if (Page <= 0) throw new BadRequestException("wrong page");
 
 			var totalItems =  await _userManager.Users.CountAsync();
 			var totalPages = (int)Math.Ceiling((double)totalItems / AppConstants.PageSize);
 			if (Page > totalPages) throw new BadRequestException("this page does not exist");
-			var users = _userManager.Users
+			var users = await _userManager.Users
 				   .Include(u => u.userGroup)
 				   .Include(u => u.userState)
 				   .Skip((Page - 1) * AppConstants.PageSize)
 				   .Take(AppConstants.PageSize)
-				   .ToList();
+				   .ToListAsync();
 			var usersDto = users.Select(x => new UserModelDto {
 				Login = x.UserName,
 				Email = x.Email,
@@ -127,8 +132,11 @@ namespace VKtest.BL.Services {
 		}
 
 		public async Task<bool> ValidateCredentials(string username, string passwrod) {
-			var user = await _userManager.Users.FirstOrDefaultAsync(u=>u.UserName == username);
-			if (user == null) throw new BadRequestException("wrog username or password");
+			var user = await _userManager.Users
+				.Include(u=>u.userState)
+				.FirstOrDefaultAsync(u=>u.UserName == username);
+			if (user == null) throw new BadRequestException("wrong username or password");
+			if (user.userState.Code == State.Blocked) throw new BadRequestException("you're blocked");
 			var check = await _userManager.CheckPasswordAsync(user, passwrod);
 			return check;
 		}

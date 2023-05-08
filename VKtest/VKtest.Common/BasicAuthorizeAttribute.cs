@@ -38,11 +38,11 @@ namespace VKtest.Common {
 						string[] parts = decodedCredentials.Split(':');
 						string username = parts[0];
 						string password = parts[1];
-						if (username == "freeuser1") {
+						/*if (username == "freeuser1") { 
 							context.HttpContext.Response.Headers["WWW-Authenticate"] = "Basic";
 							context.Result = new UnauthorizedResult();
 							return;
-						}
+						}*/
 						if (await _userService.ValidateCredentials(username, password)) return;
 
 					}
